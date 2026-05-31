@@ -984,6 +984,6 @@ if(wrongYearVacs.length){
 '''
 components.html(
     HTML_CODE,
-    height=1600,
-    scrolling=True,
+    height=1800,
+    scrolling=True
 )
