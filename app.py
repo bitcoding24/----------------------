@@ -940,42 +940,83 @@ function renderResult(res,cal,year,nRest,objective){
 }
 
 /* ---------- 실행 ---------- */
-$('runBtn').addEventListener('click',async()=>{
+$('runBtn').addEventListener('click', async () => {
   clearErr();
-  const year=parseInt($('year').value);
-  const nRest=parseInt($('restSlider').value);
-  if(!year||year<2000||year>2100){ showErr('연도를 올바르게 입력하세요.'); return; }
 
+  const year = parseInt($('year').value);
+  const nRest = parseInt($('restSlider').value);
+
+  if (!year || year < 2000 || year > 2100) {
+    showErr('연도를 올바르게 입력하세요.');
+    return;
+  }
+
+  // 1. 방학 문자열 데이터를 Date 객체로 변환
+  const vacs = vacations.map(v => ({
+    start: parseD(v.start),
+    end: parseD(v.end)
+  }));
+
+  // 2. 방학 시작일/종료일 순서 검사
+  for (const v of vacs) {
+    if (v.start > v.end) {
+      showErr('방학 시작일이 종료일보다 늦습니다.');
+      return;
+    }
+  }
+
+  // 3. 선택한 연도와 방학 연도가 같은지 검사
   const wrongYearVacs = vacations.filter(v =>
-  !v.start.startsWith(String(year) + '-') ||
-  !v.end.startsWith(String(year) + '-')
-);
+    !v.start.startsWith(String(year) + '-') ||
+    !v.end.startsWith(String(year) + '-')
+  );
 
-if(wrongYearVacs.length){
-  showErr(`${year}년으로 탐색하려면 방학 기간도 ${year}년 날짜로 입력해야 합니다.`);
-  return;
-}
-  const cal=buildCalendar(year,vacs,holidays);
-  const nFlex=cal.filter(c=>c.flexible).length;
-  if(nRest>nFlex){ showErr(`재량휴업일(${nRest}일)이 배치 가능한 평일(${nFlex}일)보다 많습니다.`); return; }
+  if (wrongYearVacs.length) {
+    showErr(`${year}년으로 탐색하려면 방학 기간도 ${year}년 날짜로 입력해야 합니다.`);
+    return;
+  }
 
-  const btn=$('runBtn'); btn.disabled=true; btn.textContent='⟳ 진화 중…';
+  // 4. 방학, 주말, 공휴일을 반영한 달력 생성
+  const cal = buildCalendar(year, vacs, holidays);
+
+  // 5. 재량휴업일을 넣을 수 있는 평일 개수 확인
+  const nFlex = cal.filter(c => c.flexible).length;
+
+  if (nRest > nFlex) {
+    showErr(`재량휴업일(${nRest}일)이 배치 가능한 평일(${nFlex}일)보다 많습니다.`);
+    return;
+  }
+
+  const btn = $('runBtn');
+  btn.disabled = true;
+  btn.textContent = '⟳ 진화 중…';
   $('progWrap').classList.add('show');
 
-  try{
-    const currentPref=pref();
-    const res=await runGA(cal,nRest,objective,currentPref,(gen,tot,best)=>{
-      $('progFill').style.width=(gen/tot*100)+'%';
-      $('progGen').textContent=`세대 ${gen} / ${tot}`;
-      $('progBest').textContent=`최저 목적함수 ${best.toFixed(4)}`;
-    });
-    renderResult(res,cal,year,nRest,objective);
-  }catch(err){
+  try {
+    const currentPref = pref();
+
+    const res = await runGA(
+      cal,
+      nRest,
+      objective,
+      currentPref,
+      (gen, tot, best) => {
+        $('progFill').style.width = (gen / tot * 100) + '%';
+        $('progGen').textContent = `세대 ${gen} / ${tot}`;
+        $('progBest').textContent = `최저 목적함수 ${best.toFixed(4)}`;
+      }
+    );
+
+    renderResult(res, cal, year, nRest, objective);
+
+  } catch (err) {
     showErr(err.message);
-    $('resultArea').innerHTML='';
-  }finally{
-    btn.disabled=false; btn.textContent='⟐ 최적 일정 탐색 시작';
-    setTimeout(()=>$('progWrap').classList.remove('show'),600);
+    $('resultArea').innerHTML = '';
+
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟐ 최적 일정 탐색 시작';
+    setTimeout(() => $('progWrap').classList.remove('show'), 600);
   }
 });
 </script>
