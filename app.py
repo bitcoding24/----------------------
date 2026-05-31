@@ -946,9 +946,15 @@ $('runBtn').addEventListener('click',async()=>{
   const nRest=parseInt($('restSlider').value);
   if(!year||year<2000||year>2100){ showErr('연도를 올바르게 입력하세요.'); return; }
 
-  const vacs=vacations.map(v=>({start:parseD(v.start),end:parseD(v.end)}));
-  for(const v of vacs){ if(v.start>v.end){ showErr('방학 시작일이 종료일보다 늦습니다.'); return; } }
+  const wrongYearVacs = vacations.filter(v =>
+  !v.start.startsWith(String(year) + '-') ||
+  !v.end.startsWith(String(year) + '-')
+);
 
+if(wrongYearVacs.length){
+  showErr(`${year}년으로 탐색하려면 방학 기간도 ${year}년 날짜로 입력해야 합니다.`);
+  return;
+}
   const cal=buildCalendar(year,vacs,holidays);
   const nFlex=cal.filter(c=>c.flexible).length;
   if(nRest>nFlex){ showErr(`재량휴업일(${nRest}일)이 배치 가능한 평일(${nFlex}일)보다 많습니다.`); return; }
