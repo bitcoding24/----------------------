@@ -381,104 +381,47 @@ HTML_CODE = r'''
 
 <script>
 /* ===================================================================
-   v3 망각 모델 파라미터 (Ebbinghaus 180일 데이터로 최적화 완료)
+   v3 망각 모델 파라미터
    =================================================================== */
 const MODEL = { M0:100.0, K0:1.0987, C:16.6823, D:0.8666, R:0.30 };
 const kAt = t => MODEL.K0 / Math.pow(1 + MODEL.C * t, MODEL.D);
 
-/* ===================================================================
-   유전 알고리즘 파라미터
-   =================================================================== */
 const GA = { POP:80, GEN:1200, TOUR:3, CX:0.9, MUT:0.02, ELITE:4 };
 
-/* ---------- 날짜 유틸 ---------- */
 const WD = ['일','월','화','수','목','금','토'];
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const parseD = s => { const [y,m,dd]=s.split('-').map(Number); return new Date(y,m-1,dd); };
 const daysBetween = (a,b) => Math.round((stripTime(b)-stripTime(a))/86400000);
 const stripTime = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const academicStart = year => `${year}-03-01`;
+const academicEnd = year => ymd(new Date(year + 1, 2, 0));
+const inAcademicYear = (date, year) => date >= academicStart(year) && date <= academicEnd(year);
 
-/* ---------- 내장 국가 공휴일 데이터: 업로드된 CSV 기준 ---------- */
 const DEFAULT_HOLIDAYS =[
-  {
-    "date": "2025-03-01",
-    "name": "삼일절"
-  },
-  {
-    "date": "2025-03-03",
-    "name": "삼일절(대체 휴일)"
-  },
-  {
-    "date": "2025-05-05",
-    "name": "부처님 오신날"
-  },
-  {
-    "date": "2025-05-06",
-    "name": "어린이날 대체 휴일"
-  },
-  {
-    "date": "2025-06-03",
-    "name": "대통령 선거일"
-  },
-  {
-    "date": "2025-06-06",
-    "name": "현충일"
-  },
-  {
-    "date": "2025-08-15",
-    "name": "광복절"
-  },
-  {
-    "date": "2025-10-03",
-    "name": "개천절"
-  },
-  {
-    "date": "2025-10-05",
-    "name": "추석연휴"
-  },
-  {
-    "date": "2025-10-06",
-    "name": "추석"
-  },
-  {
-    "date": "2025-10-07",
-    "name": "추석연휴"
-  },
-  {
-    "date": "2025-10-08",
-    "name": "추석연휴(대체휴일)"
-  },
-  {
-    "date": "2025-10-09",
-    "name": "한글날"
-  },
-  {
-    "date": "2025-12-25",
-    "name": "크리스마스"
-  },
-  {
-    "date": "2026-01-01",
-    "name": "새해"
-  },
-  {
-    "date": "2026-02-16",
-    "name": "설날 연휴"
-  },
-  {
-    "date": "2026-02-17",
-    "name": "설날"
-  },
-  {
-    "date": "2026-02-18",
-    "name": "설날연휴"
-  }
+  {"date":"2025-03-01","name":"삼일절"},
+  {"date":"2025-03-03","name":"삼일절(대체 휴일)"},
+  {"date":"2025-05-05","name":"부처님 오신날"},
+  {"date":"2025-05-06","name":"어린이날 대체 휴일"},
+  {"date":"2025-06-03","name":"대통령 선거일"},
+  {"date":"2025-06-06","name":"현충일"},
+  {"date":"2025-08-15","name":"광복절"},
+  {"date":"2025-10-03","name":"개천절"},
+  {"date":"2025-10-05","name":"추석연휴"},
+  {"date":"2025-10-06","name":"추석"},
+  {"date":"2025-10-07","name":"추석연휴"},
+  {"date":"2025-10-08","name":"추석연휴(대체휴일)"},
+  {"date":"2025-10-09","name":"한글날"},
+  {"date":"2025-12-25","name":"크리스마스"},
+  {"date":"2026-01-01","name":"새해"},
+  {"date":"2026-02-16","name":"설날 연휴"},
+  {"date":"2026-02-17","name":"설날"},
+  {"date":"2026-02-18","name":"설날연휴"}
 ];
 
-/* ---------- 공휴일/방학 유틸 ---------- */
 function holidayMapFor(year, holidayRows){
   const map = new Map();
   holidayRows.forEach(h=>{
-    if(!h.date || !h.date.startsWith(String(year)+'-')) return;
+    if(!h.date || !inAcademicYear(h.date, year)) return;
     if(!map.has(h.date)) map.set(h.date, []);
     if(!map.get(h.date).includes(h.name)) map.get(h.date).push(h.name);
   });
@@ -496,22 +439,23 @@ function vacationBoundaryDistance(d, vacations){
   return best;
 }
 
-
-/* ---------- 달력 생성 (방학 제외, 주말·국가공휴일 고정 휴업) ---------- */
 function buildCalendar(year, vacations, holidayRows){
   const holidayMap = holidayMapFor(year, holidayRows);
   const inVac = d => vacations.some(v => d >= stripTime(v.start) && d <= stripTime(v.end));
   const days = [];
-  let d = new Date(year,0,1);
-  const end = new Date(year,11,31);
+
+  let d = new Date(year, 2, 1);
+  const end = new Date(year + 1, 2, 0);
+
   while(d <= end){
     const cur = stripTime(d);
     if(!inVac(cur)){
       const key = ymd(cur);
-      const wd = cur.getDay();              // 0=일,6=토
-      const weekend = (wd===0 || wd===6);
+      const wd = cur.getDay();
+      const weekend = wd === 0 || wd === 6;
       const holidayNames = holidayMap.get(key) || [];
       const holiday = holidayNames.length > 0;
+
       days.push({
         date:new Date(cur),
         weekend,
@@ -527,102 +471,121 @@ function buildCalendar(year, vacations, holidayRows){
   return days;
 }
 
-/* ---------- 현실 보정 점수: 방학 인접 패널티 ---------- */
 function socialAdjustment(restMask, cal, pref){
   let disc=0, vacPenaltyRaw=0, nearVacCount=0;
   for(let i=0;i<restMask.length;i++){
     const c = cal[i];
-    if(!(restMask[i] && c.flexible)) continue;  // 재량휴업일만 평가
+    if(!(restMask[i] && c.flexible)) continue;
     disc++;
     if(pref.vacBuffer>0 && c.vacDist>0 && c.vacDist<=pref.vacBuffer){
-      // 방학에 가까울수록 더 큰 패널티. 평균 망각지수와 같은 스케일로 정규화합니다.
       vacPenaltyRaw += ((pref.vacBuffer - c.vacDist + 1) / pref.vacBuffer) * pref.vacWeight;
       nearVacCount++;
     }
   }
   const denom = Math.max(1, disc);
   const vacPenalty = vacPenaltyRaw / denom;
-  return {
-    adjustment: vacPenalty,
-    vacPenalty,
-    nearVacCount,
-    discretionaryCount:disc,
-  };
+  return { adjustment: vacPenalty, vacPenalty, nearVacCount, discretionaryCount:disc };
 }
 
-/* ---------- 적합도: 평균 망각지수 + 현실 보정 + 일별 risk 반환 ---------- */
 function evaluate(restMask, objective, cal=null, pref=null){
   let memory = MODEL.M0, t = 0, sum = 0, count = 0;
   const dailyRisk = new Array(restMask.length);
+
   for(let i=0;i<restMask.length;i++){
     if(restMask[i]){ t++; memory *= Math.exp(-kAt(t)); }
     else{ memory += MODEL.R*(MODEL.M0-memory); t=0; }
-    if(memory<0)memory=0; if(memory>100)memory=100;
+
+    if(memory<0)memory=0;
+    if(memory>100)memory=100;
+
     const risk = 100-memory;
     dailyRisk[i]=risk;
+
     if(objective==='all'){ sum+=risk; count++; }
     else if(!restMask[i]){ sum+=risk; count++; }
   }
+
   const baseRisk = sum/Math.max(1,count);
   const social = (cal && pref) ? socialAdjustment(restMask, cal, pref) : {adjustment:0,vacPenalty:0,nearVacCount:0,discretionaryCount:0};
   return { fitness: baseRisk + social.adjustment, baseRisk, dailyRisk, social };
 }
 
-/* ---------- GA 헬퍼 ---------- */
-function sample(arr,n){ const c=arr.slice(); for(let i=c.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[c[i],c[j]]=[c[j],c[i]];} return c.slice(0,n); }
+function sample(arr,n){
+  const c=arr.slice();
+  for(let i=c.length-1;i>0;i--){
+    const j=Math.random()*(i+1)|0;
+    [c[i],c[j]]=[c[j],c[i]];
+  }
+  return c.slice(0,n);
+}
 
 function makeIndividual(nFlex,nRest){
   const g=new Uint8Array(nFlex);
   for(const i of sample([...Array(nFlex).keys()],nRest)) g[i]=1;
   return g;
 }
+
 function decode(genome, flexIdx, fixedIdx, total){
   const mask=new Uint8Array(total);
   for(const i of fixedIdx) mask[i]=1;
   for(let i=0;i<genome.length;i++) if(genome[i]) mask[flexIdx[i]]=1;
   return mask;
 }
+
 function repair(g,nRest){
-  let cnt=0; for(const v of g) cnt+=v;
+  let cnt=0;
+  for(const v of g) cnt+=v;
+
   if(cnt>nRest){
-    const idx=[]; for(let i=0;i<g.length;i++) if(g[i]) idx.push(i);
+    const idx=[];
+    for(let i=0;i<g.length;i++) if(g[i]) idx.push(i);
     for(const i of sample(idx,cnt-nRest)) g[i]=0;
   }else if(cnt<nRest){
-    const idx=[]; for(let i=0;i<g.length;i++) if(!g[i]) idx.push(i);
+    const idx=[];
+    for(let i=0;i<g.length;i++) if(!g[i]) idx.push(i);
     for(const i of sample(idx,nRest-cnt)) g[i]=1;
   }
   return g;
 }
+
 function crossover(p1,p2,nRest){
   if(Math.random()>GA.CX) return [p1.slice(),p2.slice()];
   const pt=1+(Math.random()*(p1.length-1)|0);
   const c1=new Uint8Array(p1.length), c2=new Uint8Array(p1.length);
+
   for(let i=0;i<p1.length;i++){
     c1[i]= i<pt? p1[i]:p2[i];
     c2[i]= i<pt? p2[i]:p1[i];
   }
+
   return [repair(c1,nRest),repair(c2,nRest)];
 }
+
 function mutate(g,nRest){
   for(let i=0;i<g.length;i++) if(Math.random()<GA.MUT) g[i]^=1;
   return repair(g,nRest);
 }
+
 function tournament(pop,fits){
   let best=-1;
-  for(let i=0;i<GA.TOUR;i++){ const r=Math.random()*pop.length|0; if(best<0||fits[r]<fits[best]) best=r; }
+  for(let i=0;i<GA.TOUR;i++){
+    const r=Math.random()*pop.length|0;
+    if(best<0||fits[r]<fits[best]) best=r;
+  }
   return pop[best].slice();
 }
 
-/* ---------- GA 메인 (async, 진행률 콜백) ---------- */
 async function runGA(cal, nRest, objective, pref, onProgress){
   const total=cal.length;
   const flexIdx=[], fixedIdx=[], weekendIdx=[], holidayIdx=[];
+
   cal.forEach((c,i)=>{
     if(c.flexible) flexIdx.push(i);
     if(c.fixedRest) fixedIdx.push(i);
     if(c.weekend) weekendIdx.push(i);
     if(c.holiday) holidayIdx.push(i);
   });
+
   if(nRest>flexIdx.length) throw new Error(`재량휴업일(${nRest}일)이 배치 가능한 평일(${flexIdx.length}일)보다 많습니다.`);
 
   const fitOf=g=>evaluate(decode(g,flexIdx,fixedIdx,total),objective,cal,pref).fitness;
@@ -633,32 +596,47 @@ async function runGA(cal, nRest, objective, pref, onProgress){
   for(let gen=0;gen<GA.GEN;gen++){
     const order=[...fits.keys()].sort((a,b)=>fits[a]-fits[b]);
     const newPop=[];
+
     for(let i=0;i<GA.ELITE;i++) newPop.push(pop[order[i]].slice());
+
     while(newPop.length<GA.POP){
       const [c1,c2]=crossover(tournament(pop,fits),tournament(pop,fits),nRest);
       newPop.push(mutate(c1,nRest));
       if(newPop.length<GA.POP) newPop.push(mutate(c2,nRest));
     }
-    pop=newPop; fits=pop.map(fitOf);
+
+    pop=newPop;
+    fits=pop.map(fitOf);
+
     const best=Math.min(...fits);
     if(gen%2===0 || gen===GA.GEN-1){
       onProgress(gen+1,GA.GEN,best);
-      await new Promise(r=>setTimeout(r,0));  // UI yield
+      await new Promise(r=>setTimeout(r,0));
     }
   }
+
   const bi=fits.indexOf(Math.min(...fits));
   const bestMask=decode(pop[bi],flexIdx,fixedIdx,total);
   const ev=evaluate(bestMask,objective,cal,pref);
-  return { mask:bestMask, fitness:ev.fitness, baseRisk:ev.baseRisk, dailyRisk:ev.dailyRisk, social:ev.social, flexIdx, fixedIdx, weekendIdx, holidayIdx };
+
+  return {
+    mask:bestMask,
+    fitness:ev.fitness,
+    baseRisk:ev.baseRisk,
+    dailyRisk:ev.dailyRisk,
+    social:ev.social,
+    flexIdx,
+    fixedIdx,
+    weekendIdx,
+    holidayIdx
+  };
 }
 
-/* ===================================================================
-   UI 로직
-   =================================================================== */
 let vacations=[
-  {start:'2025-01-01',end:'2025-02-28'},
   {start:'2025-07-21',end:'2025-08-18'},
+  {start:'2026-01-01',end:'2026-02-28'},
 ];
+
 let objective='all';
 let holidays=loadHolidayRows();
 let lastYear=2025;
@@ -681,13 +659,16 @@ function sortHolidayRows(rows){
 function mergeHolidayRows(baseRows, addRows){
   const seen = new Set();
   const merged = [];
+
   [...baseRows, ...addRows].forEach(h=>{
     if(!h || !/^\d{4}-\d{2}-\d{2}$/.test(h.date || '') || !(h.name || '').trim()) return;
     const row = {date:h.date, name:h.name.trim()};
     const key = row.date + '|' + row.name;
     if(seen.has(key)) return;
-    seen.add(key); merged.push(row);
+    seen.add(key);
+    merged.push(row);
   });
+
   return sortHolidayRows(merged);
 }
 
@@ -706,23 +687,26 @@ function loadHolidayRows(){
 function currentYearHolidays(year){
   return holidays
     .map((h,i)=>({...h, idx:i}))
-    .filter(h=>h.date.startsWith(String(year)+'-'))
+    .filter(h=>inAcademicYear(h.date, year))
     .sort((a,b)=> (a.date+a.name).localeCompare(b.date+b.name, 'ko'));
 }
 
 function renderHolidayList(year){
   const box=$('holidayList');
   const rows=currentYearHolidays(year);
+
   if(!rows.length){
-    box.innerHTML='<div class="holiday-item"><span class="date">—</span><span class="name">이 연도의 공휴일이 없습니다. 위 칸에서 직접 추가하세요.</span><span></span></div>';
+    box.innerHTML='<div class="holiday-item"><span class="date">—</span><span class="name">이 학년도의 공휴일이 없습니다. 위 칸에서 직접 추가하세요.</span><span></span></div>';
     return;
   }
+
   box.innerHTML=rows.map(h=>`
     <div class="holiday-item">
       <span class="date">${h.date.slice(5)}</span>
       <span class="name" title="${h.name.replace(/"/g,'&quot;')}">${h.name}</span>
       <button type="button" class="holiday-del" data-i="${h.idx}" title="삭제">×</button>
     </div>`).join('');
+
   box.querySelectorAll('.holiday-del').forEach(btn=>{
     btn.addEventListener('click',e=>{
       holidays.splice(+e.currentTarget.dataset.i,1);
@@ -738,17 +722,21 @@ function updateHolidayInfo(){
   const totalNames=[...map.values()].reduce((s,names)=>s+names.length,0);
   const days=[...map.keys()].sort();
   const sample=days.slice(0,4).map(d=>`${d.slice(5)} ${map.get(d).join('/')}`).join(' · ');
-  const builtInCount=DEFAULT_HOLIDAYS.filter(h=>h.date.startsWith(String(year)+'-')).length;
+
   $('holidayInfo').innerHTML = days.length
-    ? `<b>${year}년 공휴일 ${days.length}일</b>(${totalNames}개 항목) 반영됨<br>${sample}${days.length>4?' · …':''}${year===2025?'<br>※ 2025년 데이터는 코드에 기본 내장되어 있습니다.':''}`
-    : `<b>${year}년 공휴일 데이터가 없습니다.</b><br>아래 추가 칸에 직접 입력하거나 CSV를 선택적으로 불러오면 주말처럼 고정 휴업일로 반영됩니다.`;
+    ? `<b>${year}학년도 공휴일 ${days.length}일</b>(${totalNames}개 항목) 반영됨<br>${sample}${days.length>4?' · …':''}<br>※ 기준 기간: ${academicStart(year)} ~ ${academicEnd(year)}`
+    : `<b>${year}학년도 공휴일 데이터가 없습니다.</b><br>기준 기간 ${academicStart(year)} ~ ${academicEnd(year)} 안의 공휴일을 직접 추가하거나 CSV로 불러오세요.`;
+
   renderHolidayList(year);
+
   const hd=$('holidayDate');
-  if(hd && (!hd.value || !hd.value.startsWith(String(year)+'-'))) hd.value=`${year}-01-01`;
+  if(hd && (!hd.value || !inAcademicYear(hd.value, year))) hd.value=academicStart(year);
 }
 
 function parseCSVLine(line){
-  const out=[]; let cur='', q=false;
+  const out=[];
+  let cur='', q=false;
+
   for(let i=0;i<line.length;i++){
     const ch=line[i];
     if(ch==='"' && line[i+1]==='"'){ cur+='"'; i++; continue; }
@@ -756,29 +744,37 @@ function parseCSVLine(line){
     if(ch===',' && !q){ out.push(cur); cur=''; continue; }
     cur+=ch;
   }
-  out.push(cur); return out.map(s=>s.trim().replace(/^﻿/,''));
+
+  out.push(cur);
+  return out.map(s=>s.trim().replace(/^﻿/,''));
 }
 
 function parseHolidayCSV(text){
   const lines=text.split(/\r?\n/).filter(l=>l.trim());
   if(lines.length<2) return [];
+
   const head=parseCSVLine(lines[0]);
   const dateIdx=head.findIndex(h=>h.includes('날짜') || h.toLowerCase()==='date');
   const nameIdx=Math.max(0, head.findIndex(h=>h.includes('공휴일') || h.includes('휴관') || h.toLowerCase().includes('name')));
   const out=[];
+
   for(const line of lines.slice(1)){
     const cols=parseCSVLine(line);
     const date=cols[dateIdx];
     const name=cols[nameIdx] || cols[0];
     if(/^\d{4}-\d{2}-\d{2}$/.test(date) && name) out.push({date,name});
   }
+
   return out;
 }
 
 function renderVacList(){
-  const box=$('vacList'); box.innerHTML='';
+  const box=$('vacList');
+  box.innerHTML='';
+
   vacations.forEach((v,i)=>{
-    const row=document.createElement('div'); row.className='vac-row';
+    const row=document.createElement('div');
+    row.className='vac-row';
     row.innerHTML=`
       <input type="date" value="${v.start}" data-i="${i}" data-k="start">
       <span class="dash">—</span>
@@ -786,20 +782,27 @@ function renderVacList(){
       <button class="vac-del" data-i="${i}">×</button>`;
     box.appendChild(row);
   });
+
   box.querySelectorAll('input[type=date]').forEach(inp=>{
     inp.addEventListener('change',e=>{
       vacations[+e.target.dataset.i][e.target.dataset.k]=e.target.value;
     });
   });
+
   box.querySelectorAll('.vac-del').forEach(b=>{
-    b.addEventListener('click',e=>{ vacations.splice(+e.target.dataset.i,1); renderVacList(); });
+    b.addEventListener('click',e=>{
+      vacations.splice(+e.target.dataset.i,1);
+      renderVacList();
+    });
   });
 }
+
 renderVacList();
 
 $('vacAdd').addEventListener('click',()=>{
-  const y=$('year').value||2025;
-  vacations.push({start:`${y}-07-21`,end:`${y}-08-18`}); renderVacList();
+  const y=parseInt($('year').value)||2025;
+  vacations.push({start:`${y}-07-21`,end:`${y}-08-18`});
+  renderVacList();
 });
 
 $('restSlider').addEventListener('input',e=>$('restVal').textContent=e.target.value);
@@ -810,20 +813,32 @@ updateHolidayInfo();
 $('holidayFile').addEventListener('change',async e=>{
   const file=e.target.files?.[0];
   if(!file) return;
+
   try{
     const rows=parseHolidayCSV(await file.text());
     if(!rows.length) throw new Error('날짜와 공휴일명이 있는 CSV가 아닙니다.');
     holidays=mergeHolidayRows(holidays, rows);
     saveHolidayRows();
     updateHolidayInfo();
-  }catch(err){ showErr('공휴일 CSV를 읽지 못했습니다: '+err.message); }
+  }catch(err){
+    showErr('공휴일 CSV를 읽지 못했습니다: '+err.message);
+  }
 });
 
 $('holidayAdd').addEventListener('click',()=>{
   const date=$('holidayDate').value;
   const name=$('holidayName').value.trim();
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ showErr('추가할 공휴일 날짜를 올바르게 입력하세요.'); return; }
-  if(!name){ showErr('추가할 공휴일 이름을 입력하세요.'); return; }
+
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
+    showErr('추가할 공휴일 날짜를 올바르게 입력하세요.');
+    return;
+  }
+
+  if(!name){
+    showErr('추가할 공휴일 이름을 입력하세요.');
+    return;
+  }
+
   holidays=mergeHolidayRows(holidays, [{date,name}]);
   $('holidayName').value='';
   saveHolidayRows();
@@ -839,8 +854,8 @@ $('holidayReset').addEventListener('click',()=>{
 $('year').addEventListener('change',e=>{
   const y=parseInt(e.target.value);
   if(!y || y<2000 || y>2100) return;
-  // 방학 기간 입력은 원래 방식대로 사용자가 직접 지정한 값을 유지합니다.
-  lastYear=y; updateHolidayInfo();
+  lastYear=y;
+  updateHolidayInfo();
 });
 
 $('objSeg').addEventListener('click',e=>{
@@ -850,15 +865,20 @@ $('objSeg').addEventListener('click',e=>{
   $('objLabel').textContent='OBJECTIVE · '+objective.toUpperCase();
 });
 
-function showErr(msg){ const e=$('errBox'); e.textContent='⚠ '+msg; e.classList.add('show'); }
-function clearErr(){ $('errBox').classList.remove('show'); }
+function showErr(msg){
+  const e=$('errBox');
+  e.textContent='⚠ '+msg;
+  e.classList.add('show');
+}
 
-/* ---------- 결과 렌더 ---------- */
+function clearErr(){
+  $('errBox').classList.remove('show');
+}
+
 function renderResult(res,cal,year,nRest,objective){
   const nFlex=res.flexIdx.length, nWeek=res.weekendIdx.length, nHoliday=res.holidayIdx.length;
   const classDays=nFlex-nRest;
 
-  // 배치된 재량휴업일
   const discDays=[];
   cal.forEach((c,i)=>{ if(res.mask[i] && c.flexible) discDays.push(c); });
 
@@ -870,20 +890,39 @@ function renderResult(res,cal,year,nRest,objective){
     return `<span class="${cls}"><b>${d.getMonth()+1}/${d.getDate()}</b> ${WD[d.getDay()]}${flags.length?` · ${flags.join(' · ')}`:''}</span>`;
   }).join('');
 
-  // 캘린더 (방학/주말/공휴일/수업/재량휴업 색)
   const maskByDate={}, vacSet=new Set();
-  cal.forEach((c,i)=>{ maskByDate[ymd(c.date)]={rest:res.mask[i],weekend:c.weekend,holiday:c.holiday,holidayNames:c.holidayNames,flexible:c.flexible}; });
-  vacations.forEach(v=>{ let d=parseD(v.start); const e=parseD(v.end); while(d<=e){vacSet.add(ymd(d)); d.setDate(d.getDate()+1);} });
+
+  cal.forEach((c,i)=>{
+    maskByDate[ymd(c.date)]={rest:res.mask[i],weekend:c.weekend,holiday:c.holiday,holidayNames:c.holidayNames,flexible:c.flexible};
+  });
+
+  vacations.forEach(v=>{
+    let d=parseD(v.start);
+    const e=parseD(v.end);
+    while(d<=e){
+      vacSet.add(ymd(d));
+      d.setDate(d.getDate()+1);
+    }
+  });
 
   let calHTML='';
-  for(let m=0;m<12;m++){
-    const first=new Date(year,m,1), pad=first.getDay();
-    const dim=new Date(year,m+1,0).getDate();
+
+  for(let offset=0; offset<12; offset++){
+    const monthIndex = 2 + offset;
+    const displayYear = year + Math.floor(monthIndex / 12);
+    const m = monthIndex % 12;
+
+    const first=new Date(displayYear,m,1);
+    const pad=first.getDay();
+    const dim=new Date(displayYear,m+1,0).getDate();
+
     let cells='';
     for(let p=0;p<pad;p++) cells+='<div class="day empty"></div>';
+
     for(let dn=1;dn<=dim;dn++){
-      const key=ymd(new Date(year,m,dn));
+      const key=ymd(new Date(displayYear,m,dn));
       let cls='class', label=dn, title=key;
+
       if(vacSet.has(key)) cls='vac';
       else if(maskByDate[key]){
         const mday=maskByDate[key];
@@ -892,9 +931,11 @@ function renderResult(res,cal,year,nRest,objective){
         else if(mday.weekend) cls='weekend';
         else cls='class';
       }
+
       cells+=`<div class="day ${cls}" title="${title}">${label}</div>`;
     }
-    calHTML+=`<div class="month"><div class="month-name">${m+1}월</div>
+
+    calHTML+=`<div class="month"><div class="month-name">${displayYear}.${m+1}월</div>
       <div class="dow"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
       <div class="days">${cells}</div></div>`;
   }
@@ -928,10 +969,9 @@ function renderResult(res,cal,year,nRest,objective){
       <h4>배치된 재량휴업일 ${discDays.length}일</h4>
       <div class="chips">${chips||'<span style="color:var(--txt-faint);font-size:13px">없음</span>'}</div>
     </div>
-    <div class="note">${noteText}<br><br><b>점수식</b> = 평균 망각지수 ${res.baseRisk.toFixed(3)} + 방학 인접 패널티 ${res.social.vacPenalty.toFixed(3)} = 최종 목적함수 ${res.fitness.toFixed(3)}</div>`;
+    <div class="note">${noteText}<br><br><b>학년도 기준 기간</b> = ${academicStart(year)} ~ ${academicEnd(year)}<br><b>점수식</b> = 평균 망각지수 ${res.baseRisk.toFixed(3)} + 방학 인접 패널티 ${res.social.vacPenalty.toFixed(3)} = 최종 목적함수 ${res.fitness.toFixed(3)}</div>`;
 }
 
-/* ---------- 실행 ---------- */
 $('runBtn').addEventListener('click', async () => {
   clearErr();
 
@@ -939,17 +979,15 @@ $('runBtn').addEventListener('click', async () => {
   const nRest = parseInt($('restSlider').value);
 
   if (!year || year < 2000 || year > 2100) {
-    showErr('연도를 올바르게 입력하세요.');
+    showErr('학년도를 올바르게 입력하세요.');
     return;
   }
 
-  // 1. 방학 문자열 데이터를 Date 객체로 변환
   const vacs = vacations.map(v => ({
     start: parseD(v.start),
     end: parseD(v.end)
   }));
 
-  // 2. 방학 시작일/종료일 순서 검사
   for (const v of vacs) {
     if (v.start > v.end) {
       showErr('방학 시작일이 종료일보다 늦습니다.');
@@ -957,21 +995,19 @@ $('runBtn').addEventListener('click', async () => {
     }
   }
 
-  // 3. 선택한 연도와 방학 연도가 같은지 검사
-  const wrongYearVacs = vacations.filter(v =>
-    !v.start.startsWith(String(year) + '-') ||
-    !v.end.startsWith(String(year) + '-')
+  const periodStart = parseD(academicStart(year));
+  const periodEnd = parseD(academicEnd(year));
+
+  const outOfRangeVacs = vacs.filter(v =>
+    v.start < periodStart || v.end > periodEnd
   );
 
-  if (wrongYearVacs.length) {
-    showErr(`${year}년으로 탐색하려면 방학 기간도 ${year}년 날짜로 입력해야 합니다.`);
+  if (outOfRangeVacs.length) {
+    showErr(`${year}학년도 기준 기간은 ${academicStart(year)}부터 ${academicEnd(year)}까지입니다. 방학 기간도 이 범위 안으로 입력해야 합니다.`);
     return;
   }
 
-  // 4. 방학, 주말, 공휴일을 반영한 달력 생성
   const cal = buildCalendar(year, vacs, holidays);
-
-  // 5. 재량휴업일을 넣을 수 있는 평일 개수 확인
   const nFlex = cal.filter(c => c.flexible).length;
 
   if (nRest > nFlex) {
